@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Guardian Vision Dashboard</title>
+    <style>
+        body { background: #111; color: #eee; font-family: sans-serif; padding: 20px; }
+        h2 { color: cyan; }
+        input, button { padding: 8px; margin: 5px; }
+        .camera { margin: 10px 0; }
+        img { width: 200px; margin: 5px; border-radius: 8px; }
+        a { color: cyan; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <h2>Welcome, {{ session.username }} ({{ role }})</h2>
+    <form action="/logout"><button>Logout</button></form>
+
+    {% if role == 'admin' %}
+    <h3>Add Camera</h3>
+    <form action="/add_camera" method="POST">
+        <input name="ip" placeholder="IP" required>
+        <input name="room" placeholder="Room Name" required>
+        <input name="source" placeholder="Label" required>
+        <button>Add Camera</button>
+    </form>
+    {% endif %}
+
+    <h3>Connected Cameras</h3>
+    <h3>Connected Cameras</h3>
+{% for cam in cameras %}
+    <p>
+        <a href="/camera/{{ cam.room }}">
+            {{ cam.room }} - {{ cam.ip }} ({{ cam.source }})
+        </a>
+        <form action="/remove_camera" method="POST" style="display:inline;">
+            <input type="hidden" name="room" value="{{ cam.room }}">
+            <button type="submit" style="background-color:red;color:white;">Remove</button>
+        </form>
+    </p>
+{% endfor %}
+    <h3>📜 Latest Detection Logs</h3>
+    {% if logs %}
+        <ul>{% for log in logs %}<li>{{ log.timestamp }} - {{ log.room }} - {{ log.status }}</li>{% endfor %}</ul>
+    {% else %}<p>No logs found.</p>{% endif %}
+
+    <h3>🖼 Recent Screenshots</h3>
+    {% for img in images %}<img src="/screenshots/{{ img }}">{% endfor %}
+</body>
+</html>
