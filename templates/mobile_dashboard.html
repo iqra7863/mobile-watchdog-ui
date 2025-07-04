@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Guardian Vision Viewer</title>
+  <style>
+    body {
+      background-color: #111;
+      color: white;
+      font-family: Arial;
+      padding: 15px;
+    }
+    h2 {
+      color: cyan;
+    }
+  </style>
+</head>
+<body>
+  <h2>📲 Mobile Logs Viewer</h2>
+
+  <h3>📌 Class Links</h3>
+  <ul>
+    {% for cam in cameras %}
+      <li><a href="/camera/{{ cam.ip }}" style="color: orange;">{{ cam.room }}</a></li>
+    {% endfor %}
+  </ul>
+
+  <h3>🧾 Logs</h3>
+  <ul>
+    {% for log in logs %}
+      <li>{{ log.timestamp }} - {{ log.room }} - {{ log.label }}</li>
+    {% endfor %}
+  </ul>
+
+  <h3>🖼️ Screenshots</h3>
+  <div style="display: flex; flex-wrap: wrap;">
+    {% for image in images %}
+      <div style="margin: 8px;">
+        <img src="{{ url_for('get_screenshot', filename=image) }}" width="160">
+      </div>
+    {% endfor %}
+  </div>
+</body>
+</html>

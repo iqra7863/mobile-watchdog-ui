@@ -1,59 +1,76 @@
-from flask import Flask
-import os, json, cv2
-from ultralytics import YOLO
+import cv2
+import requests
 from datetime import datetime
-import csv
-import threading
-import time
+import os
+from ultralytics import YOLO
 
-app = Flask(__name__)
-SCREENSHOT_DIR = "screenshots"
-LOG_FILE = "logs.csv"
-CAM_FILE = "cameras.json"
-DETECTION_INTERVAL = 2  # seconds
+# ========== CONFIG ==========
+CAMERA_URL = 'http://100.76.202.108:8080/video'  # Your Mobile IP Webcam
+SERVER_URL = 'http://127.0.0.1:5000/upload_log'  # Your Flask server URL
+ROOM_NAME = '1'  # e.g., Lab 1, Room A
+CAMERA_SOURCE = 'Mobile'
+DETECTION_CLASS = 'mobile phone'  # class name in YOLO model
 
-if not os.path.exists(SCREENSHOT_DIR):
-    os.makedirs(SCREENSHOT_DIR)
+SCREENSHOT_FOLDER = 'screenshots'
+os.makedirs(SCREENSHOT_FOLDER, exist_ok=True)
 
-model = YOLO("yolov8n.pt")
+# ========== Load YOLO Model ==========
+model = YOLO('yolov8n.pt')  # Use your custom model here if needed
 
-def log_detection(room, status):
-    with open(LOG_FILE, "a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), room, status])
+# ========== Time Filter ==========
+last_detection_time = {}
 
-def save_screenshot(frame, room, source):
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = f"{room}_{source}_{timestamp}.jpg"
-    path = os.path.join(SCREENSHOT_DIR, filename)
-    cv2.imwrite(path, frame)
+def should_save_detection(label):
+    now = datetime.now()
+    if label not in last_detection_time or (now - last_detection_time[label]).total_seconds() > 120:
+        last_detection_time[label] = now
+        return True
+    return False
 
-def detect(cam):
-    cap = cv2.VideoCapture(cam['ip'] + "/video")
-    if not cap.isOpened():
-        print(f"[ERROR] Failed to open {cam['room']} - {cam['ip']}")
-        return
+# ========== Start Capture ==========
+cap = cv2.VideoCapture(CAMERA_URL)
 
-    while True:
-        ret, frame = cap.read()
-        if not ret: break
-        results = model.predict(frame, imgsz=640, conf=0.5)
-        for r in results:
-            if r.boxes:
-                log_detection(cam['room'], "Mobile Detected")
-                save_screenshot(frame, cam['room'], cam['source'])
-        time.sleep(DETECTION_INTERVAL)
+if not cap.isOpened():
+    print("❌ Failed to open camera stream.")
+    exit()
 
-@app.route('/')
-def index():
-    return "YOLO Detection Running"
+print("✅ Detection Started...")
 
-def start_detection():
-    with open(CAM_FILE) as f:
-        cams = json.load(f)
-    for cam in cams:
-        threading.Thread(target=detect, args=(cam,), daemon=True).start()
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("❌ Failed to grab frame.")
+        break
 
-if __name__ == '__main__':
-    start_detection()
-    app.run(host="0.0.0.0", port=5001)
+    # Detect
+    results = model(frame)[0]
+    for box in results.boxes:
+        cls = int(box.cls[0])
+        label = model.names[cls]
+        if label.lower() in ['mobile phone', 'cell phone', 'phone'] and should_save_detection(label):
+            # Save screenshot
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            filename = f"{ROOM_NAME}_{CAMERA_SOURCE}_{timestamp}.jpg"
+            filepath = os.path.join(SCREENSHOT_FOLDER, filename)
+            cv2.imwrite(filepath, frame)
+
+            # Upload log to server
+            payload = {
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'room': ROOM_NAME,
+                'label': 'Mobile Detected',
+                'filename': filename
+            }
+            try:
+                res = requests.post(SERVER_URL, json=payload)
+                print("✅ Uploaded:", payload)
+            except Exception as e:
+                print("❌ Upload failed:", e)
+
+    # Optional: Show preview window
+    cv2.imshow("Live Detection", frame)
+    if cv2.waitKey(1) == 27:  # ESC to quit
+        break
+
+cap.release()
+cv2.destroyAllWindows()

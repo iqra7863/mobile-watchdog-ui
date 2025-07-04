@@ -1,51 +1,24 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Room {{ room_id }} - Logs & Screenshots</title>
+    <title>Live Camera - {{ camera['room'] }}</title>
     <style>
         body {
             background-color: #111;
             color: #fff;
+            text-align: center;
             font-family: Arial, sans-serif;
-            padding: 20px;
         }
-        a {
-            color: #00ccff;
-            text-decoration: none;
-        }
-        h2 {
-            color: #00ccff;
-        }
-        img {
-            width: 150px;
-            margin: 5px;
-            border: 2px solid #444;
-            border-radius: 8px;
+        iframe {
+            border: none;
+            width: 80%;
+            height: 480px;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-    <h2>📷 Room {{ room_id }} - Logs & Screenshots</h2>
-    <p><a href="{{ url_for('dashboard') }}">⬅ Back to Dashboard</a></p>
-
-    <h3>Recent Logs</h3>
-    {% if logs %}
-        <ul>
-            {% for log in logs %}
-                <li>{{ log.timestamp }} - {{ log.status }}</li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <p>No logs yet for this room.</p>
-    {% endif %}
-
-    <h3>Recent Screenshots</h3>
-    {% if screenshots %}
-        {% for image in screenshots %}
-            <img src="{{ url_for('static', filename='screenshots/' + image) }}">
-        {% endfor %}
-    {% else %}
-        <p>No screenshots available.</p>
-    {% endif %}
+    <h2>📷 Live View: {{ camera['room'] }}</h2>
+    <iframe src="{{ camera['ip'] }}" allowfullscreen></iframe>
 </body>
 </html>

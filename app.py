@@ -1,7 +1,6 @@
-from flask import Flask, render_template, request, redirect, session, url_for, send_file
+from flask import Flask, render_template, request, redirect, session, url_for, send_file, send_from_directory
 import os
 import json
-import pandas as pd
 from datetime import datetime
 
 app = Flask(__name__)
@@ -16,21 +15,20 @@ LOG_FILE = 'logs.csv'
 if not os.path.exists(SCREENSHOT_FOLDER):
     os.makedirs(SCREENSHOT_FOLDER)
 
-# Load users securely
+# Load users
 def load_users():
     if os.path.exists(USER_FILE):
         with open(USER_FILE, 'r') as f:
             return json.load(f)
     return {}
 
-# Load Cameras
+# Load and Save cameras
 def load_cameras():
     if os.path.exists(CAM_FILE):
         with open(CAM_FILE, 'r') as f:
             return json.load(f)
     return []
 
-# Save Cameras
 def save_cameras(cameras):
     with open(CAM_FILE, 'w') as f:
         json.dump(cameras, f, indent=4)
@@ -40,14 +38,7 @@ def login():
     if request.method == 'POST':
         user = request.form['username']
         pwd = request.form['password']
-
-        # Force re-load users on every login
-        if os.path.exists(USER_FILE):
-            with open(USER_FILE, 'r') as f:
-                users = json.load(f)
-        else:
-            users = {}
-
+        users = load_users()
         if user in users and users[user]['password'] == pwd:
             session['username'] = user
             session['role'] = users[user]['role']
@@ -55,23 +46,34 @@ def login():
         else:
             return render_template('login.html', error="Invalid credentials")
     return render_template('login.html')
+
 @app.route('/dashboard')
 def dashboard():
     if 'username' not in session:
         return redirect('/')
 
+    # Load Logs
     logs = []
     if os.path.exists(LOG_FILE):
         try:
-            df = pd.read_csv(LOG_FILE)
-            df = df.tail(20)
-            logs = df.to_dict('records')
+            with open(LOG_FILE, 'r') as f:
+                lines = f.readlines()
+                for line in lines[-20:]:
+                    parts = line.strip().split(',')
+                    if len(parts) == 3:
+                        logs.append({
+                            'timestamp': parts[0],
+                            'room': parts[1],
+                            'label': parts[2]
+                        })
         except Exception as e:
-            print(f"Error loading logs: {e}")
+            print("Log file read error:", e)
 
+    # Load Screenshots
     try:
         images = sorted(os.listdir(SCREENSHOT_FOLDER), reverse=True)[:10]
-    except:
+    except Exception as e:
+        print("Screenshot folder read error:", e)
         images = []
 
     cameras = load_cameras()
@@ -111,13 +113,17 @@ def clear_screenshots():
         os.remove(os.path.join(SCREENSHOT_FOLDER, f))
     return redirect('/dashboard')
 
-@app.route('/camera/<ip>')
-def camera_view(ip):
+@app.route('/screenshots/<filename>')
+def get_screenshot(filename):
+    return send_from_directory(SCREENSHOT_FOLDER, filename)
+
+@app.route('/camera_view')
+def camera_view():
+    ip = request.args.get('ip')
     cameras = load_cameras()
     camera = next((c for c in cameras if c['ip'] == ip), None)
     return render_template('camera_view.html', camera=camera)
 
-# Optional pause/resume buttons (connect with detect_api if needed)
 @app.route('/pause', methods=['POST'])
 def pause_detection():
     return redirect('/dashboard')
@@ -126,7 +132,33 @@ def pause_detection():
 def resume_detection():
     return redirect('/dashboard')
 
+@app.route('/upload_log', methods=['POST'])
+def upload_log():
+    data = request.get_json()
+    with open(LOG_FILE, 'a') as f:
+        f.write(f"{data['timestamp']},{data['room']},{data['label']}\n")
+    return 'OK'
+
+@app.route('/mobile_dashboard')
+def mobile_dashboard():
+    if 'username' not in session:
+        return redirect('/')
+    logs = []
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, 'r') as f:
+            lines = f.readlines()
+            for line in lines[-20:]:
+                parts = line.strip().split(',')
+                if len(parts) == 3:
+                    logs.append({
+                        'timestamp': parts[0],
+                        'room': parts[1],
+                        'label': parts[2]
+                    })
+    images = sorted(os.listdir(SCREENSHOT_FOLDER), reverse=True)[:10]
+    cameras = load_cameras()
+    return render_template('mobile_dashboard.html', logs=logs, images=images, cameras=cameras)
+
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
