@@ -1,59 +1,130 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <title>Guardian Vision Dashboard</title>
   <style>
     body {
       background-color: #111;
-      color: white;
+      color: #eee;
       font-family: Arial, sans-serif;
       padding: 20px;
     }
-    button {
-      padding: 10px;
+    h2 { color: #0f0; }
+    a, button {
+      background-color: #333;
+      color: white;
+      border: 1px solid #666;
+      padding: 6px 12px;
       margin: 5px;
-      font-size: 14px;
-      border-radius: 6px;
+      text-decoration: none;
+      cursor: pointer;
     }
-    .camera {
-      margin: 15px 0;
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      border: 1px solid #555;
+      padding: 6px;
+      text-align: left;
+    }
+    .screenshot {
+      width: 160px;
+      margin: 10px;
+      border: 1px solid #555;
+      border-radius: 6px;
     }
   </style>
 </head>
 <body>
-  <h1>🛡️ Guardian Vision Dashboard</h1>
 
-  {% if role == 'admin' %}
-    <form action="/resume" method="POST"><button>▶ Resume Detection</button></form>
-    <form action="/pause" method="POST"><button>⏸ Pause Detection</button></form>
-    <form action="/clear_screenshots" method="GET"><button>🧹 Clear Screenshots</button></form>
-    <form action="/download_logs" method="GET"><button>⬇ Download Logs</button></form>
-  {% endif %}
+<h2>👁️ Guardian Vision - Dashboard ({{ session.username }})</h2>
 
-  <h3>📡 Live Camera Feeds</h3>
+<!-- Controls -->
+<form method="get" action="/dashboard" style="display:inline;">
+  <button type="submit">🔄 Refresh</button>
+</form>
+
+<form method="post" action="/pause" style="display:inline;">
+  <button type="submit">⏸️ Pause Detection</button>
+</form>
+<form method="post" action="/resume" style="display:inline;">
+  <button type="submit">▶️ Resume Detection</button>
+</form>
+
+{% if session.role == 'admin' %}
+  <a href="/download_logs">⬇️ Download Logs</a>
+{% endif %}
+
+<!-- Add Camera Form -->
+{% if session.role == 'admin' %}
+  <h3>Add Camera</h3>
+  <form method="POST" action="/add_camera">
+    <input type="text" name="ip" placeholder="IP" required>
+    <input type="text" name="room" placeholder="Room" required>
+    <input type="text" name="source" placeholder="Source" required>
+    <button type="submit">➕ Add</button>
+  </form>
+{% endif %}
+
+<!-- Camera List -->
+<h3>🎥 Connected Cameras</h3>
+<table>
+  <tr><th>Room</th><th>IP</th><th>Live</th><th>Actions</th></tr>
   {% for cam in cameras %}
-    <div class="camera">
-      <strong>{{ cam.room }}</strong><br>
-<a href="/camera_view?ip={{ cam.ip }}">View Full</a>
-      <img src="http://{{ cam.ip }}/shot.jpg" width="320">
-    </div>
+    <tr>
+      <td>{{ cam.room }}</td>
+      <td>{{ cam.ip }}</td>
+      <td><a href="/camera_view?ip={{ cam.ip }}">🔍 View Live</a></td>
+      <td>
+        {% if session.role == 'admin' %}
+          <a href="/remove_camera/{{ cam.ip | replace('/', '__SLASH__') }}">❌ Remove</a>
+        {% endif %}
+        <a href="/clear_room/{{ cam.room }}">🧹 Clear</a>
+      </td>
+    </tr>
   {% endfor %}
+</table>
 
-  <h3>📜 Latest Detection Logs</h3>
-  <ul>
-    {% for log in logs %}
-      <li>🕒 {{ log.timestamp }} - {{ log.room }} - {{ log.label }}</li>
-    {% endfor %}
-  </ul>
+<!-- Logs -->
+<h3>📄 Recent Logs</h3>
+{% if logs %}
+<table>
+  <tr><th>Time</th><th>Room</th><th>Label</th></tr>
+  {% for log in logs %}
+    <tr>
+      <td>{{ log.timestamp }}</td>
+      <td>{{ log.room }}</td>
+      <td>{{ log.label }}</td>
+    </tr>
+  {% endfor %}
+</table>
+{% else %}
+  <p>No logs available.</p>
+{% endif %}
 
-  <h3>🖼️ Recent Screenshots</h3>
-  <div style="display: flex; flex-wrap: wrap;">
-    {% for image in images %}
-      <div style="margin: 10px;">
-        <img src="{{ url_for('get_screenshot', filename=image) }}" width="240" style="border: 2px solid white;"><br>
-        <small>{{ image }}</small>
-      </div>
-    {% endfor %}
-  </div>
+<!-- Screenshots -->
+<h3>📄 Live Log Console</h3>
+<div id="live-logs">Loading logs...</div>
+
+<script>
+  function fetchLogs() {
+    fetch('/get_logs')
+      .then(response => response.json())
+      .then(data => {
+        let html = '<table><tr><th>Time</th><th>Room</th><th>Label</th></tr>';
+        for (let log of data.reverse()) {
+          html += `<tr><td>${log.timestamp}</td><td>${log.room}</td><td>${log.label}</td></tr>`;
+        }
+        html += '</table>';
+        document.getElementById('live-logs').innerHTML = html;
+      });
+  }
+
+  fetchLogs();              // Load immediately
+  setInterval(fetchLogs, 5000); // Update every 5 seconds
+</script>
 </body>
 </html>

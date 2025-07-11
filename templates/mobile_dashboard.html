@@ -1,43 +1,69 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Guardian Vision Viewer</title>
-  <style>
-    body {
-      background-color: #111;
-      color: white;
-      font-family: Arial;
-      padding: 15px;
-    }
-    h2 {
-      color: cyan;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Mobile Detection Viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            background-color: #111;
+            color: #eee;
+            font-family: sans-serif;
+            padding: 10px;
+        }
+        h2, h3 {
+            color: #0f0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 6px;
+            border: 1px solid #444;
+            text-align: left;
+            font-size: 14px;
+        }
+        img {
+            width: 100%;
+            max-width: 250px;
+            height: auto;
+            border: 1px solid #555;
+            margin: 5px 0;
+        }
+        .image-block {
+            margin-bottom: 15px;
+        }
+    </style>
 </head>
 <body>
-  <h2>📲 Mobile Logs Viewer</h2>
 
-  <h3>📌 Class Links</h3>
-  <ul>
-    {% for cam in cameras %}
-      <li><a href="/camera/{{ cam.ip }}" style="color: orange;">{{ cam.room }}</a></li>
-    {% endfor %}
-  </ul>
+<h2>📱 Mobile Detection Dashboard</h2>
 
-  <h3>🧾 Logs</h3>
-  <ul>
+<h3>🕒 Recent Logs</h3>
+<table>
+    <tr>
+        <th>Time</th>
+        <th>Room</th>
+        <th>Label</th>
+    </tr>
     {% for log in logs %}
-      <li>{{ log.timestamp }} - {{ log.room }} - {{ log.label }}</li>
+    <tr>
+        <td>{{ log.timestamp }}</td>
+        <td>{{ log.room }}</td>
+        <td>{{ log.label }}</td>
+    </tr>
     {% endfor %}
-  </ul>
+</table>
 
-  <h3>🖼️ Screenshots</h3>
-  <div style="display: flex; flex-wrap: wrap;">
-    {% for image in images %}
-      <div style="margin: 8px;">
-        <img src="{{ url_for('get_screenshot', filename=image) }}" width="160">
-      </div>
-    {% endfor %}
-  </div>
+<h3>🖼️ Recent Screenshots</h3>
+{% for img in images %}
+<div class="image-block">
+    <img src="/screenshots/{{ img.file }}">
+    <small>📍 Room: {{ img.room }}</small>
+</div>
+{% endfor %}
+
 </body>
 </html>

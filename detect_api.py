@@ -3,74 +3,112 @@ import requests
 from datetime import datetime
 import os
 from ultralytics import YOLO
+import json
+import time
+import threading
 
 # ========== CONFIG ==========
-CAMERA_URL = 'http://100.76.202.108:8080/video'  # Your Mobile IP Webcam
-SERVER_URL = 'http://127.0.0.1:5000/upload_log'  # Your Flask server URL
-ROOM_NAME = '1'  # e.g., Lab 1, Room A
-CAMERA_SOURCE = 'Mobile'
-DETECTION_CLASS = 'mobile phone'  # class name in YOLO model
-
+CAM_CONFIG_FILE = 'camera_config.json'
+SERVER_URL = 'http://127.0.0.1:5000/upload_log'  # Replace with your Render/PC IP if needed
+DETECTION_STATE_FILE = 'detection_state.json'
 SCREENSHOT_FOLDER = 'screenshots'
 os.makedirs(SCREENSHOT_FOLDER, exist_ok=True)
 
-# ========== Load YOLO Model ==========
-model = YOLO('yolov8n.pt')  # Use your custom model here if needed
+# ========== Load YOLOv8 ==========
+model = YOLO('yolov8n.pt')  # Replace if using custom trained model
 
-# ========== Time Filter ==========
+# ========== Cooldown Filter ==========
 last_detection_time = {}
 
-def should_save_detection(label):
+def should_save_detection(label, room):
     now = datetime.now()
-    if label not in last_detection_time or (now - last_detection_time[label]).total_seconds() > 120:
-        last_detection_time[label] = now
+    if room not in last_detection_time:
+        last_detection_time[room] = {}
+    if label not in last_detection_time[room] or (now - last_detection_time[room][label]).total_seconds() > 120:
+        last_detection_time[room][label] = now
         return True
     return False
 
-# ========== Start Capture ==========
-cap = cv2.VideoCapture(CAMERA_URL)
+def get_detection_status():
+    if os.path.exists(DETECTION_STATE_FILE):
+        with open(DETECTION_STATE_FILE, 'r') as f:
+            return json.load(f).get("status", "active")
+    return "active"
 
-if not cap.isOpened():
-    print("❌ Failed to open camera stream.")
-    exit()
+# ========== Main Detection Function ==========
+def run_detection_for_camera(camera_config):
+    room = camera_config['room']
+    source = camera_config['source']
+    ip = camera_config['ip']
+    url = f"{ip}/video" if not ip.endswith('/video') else ip
 
-print("✅ Detection Started...")
+    cap = cv2.VideoCapture(url)
+    if not cap.isOpened():
+        print(f"❌ Could not open stream: {room} ({url})")
+        return
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        print("❌ Failed to grab frame.")
-        break
+    print(f"✅ Running detection for: {room} ({url})")
 
-    # Detect
-    results = model(frame)[0]
-    for box in results.boxes:
-        cls = int(box.cls[0])
-        label = model.names[cls]
-        if label.lower() in ['mobile phone', 'cell phone', 'phone'] and should_save_detection(label):
-            # Save screenshot
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            filename = f"{ROOM_NAME}_{CAMERA_SOURCE}_{timestamp}.jpg"
-            filepath = os.path.join(SCREENSHOT_FOLDER, filename)
-            cv2.imwrite(filepath, frame)
+    while True:
+        if get_detection_status() == "paused":
+            print(f"⏸️ Detection paused for {room}")
+            time.sleep(5)
+            continue
 
-            # Upload log to server
-            payload = {
-                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'room': ROOM_NAME,
-                'label': 'Mobile Detected',
-                'filename': filename
-            }
-            try:
-                res = requests.post(SERVER_URL, json=payload)
-                print("✅ Uploaded:", payload)
-            except Exception as e:
-                print("❌ Upload failed:", e)
+        ret, frame = cap.read()
+        if not ret:
+            print(f"⚠️ Lost stream from {room}, retrying...")
+            cap.release()
+            time.sleep(5)
+            cap = cv2.VideoCapture(url)
+            continue
 
-    # Optional: Show preview window
-    cv2.imshow("Live Detection", frame)
-    if cv2.waitKey(1) == 27:  # ESC to quit
-        break
+        results = model(frame)[0]
+        for box in results.boxes:
+            cls = int(box.cls[0])
+            label = model.names[cls]
+            if label.lower() in ['mobile phone', 'cell phone', 'phone']:
+                if should_save_detection(label, room):
+                    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                    filename = f"{room}_{source}_{timestamp}.jpg"
+                    filepath = os.path.join(SCREENSHOT_FOLDER, filename)
+                    cv2.imwrite(filepath, frame)
 
-cap.release()
-cv2.destroyAllWindows()
+                    payload = {
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'room': room,
+                        'label': 'Mobile Detected',
+                        'filename': filename
+                    }
+                    try:
+                        res = requests.post(SERVER_URL, json=payload)
+                        res.raise_for_status()
+                        print(f"📤 Log sent: {room} → Mobile Detected")
+                    except Exception as e:
+                        print(f"❌ Log upload failed for {room}: {e}")
+
+    cap.release()
+
+# ========== Start for All Cameras ==========
+if __name__ == '__main__':
+    if not os.path.exists(CAM_CONFIG_FILE):
+        print(f"❌ {CAM_CONFIG_FILE} not found.")
+        exit()
+
+    with open(CAM_CONFIG_FILE, 'r') as f:
+        cameras = json.load(f)
+
+    if not cameras:
+        print("❌ No cameras configured.")
+        exit()
+
+    print(f"🚀 Starting detection for {len(cameras)} camera(s)...\n")
+
+    threads = []
+    for cam in cameras:
+        t = threading.Thread(target=run_detection_for_camera, args=(cam,))
+        t.start()
+        threads.append(t)
+
+    for t in threads:
+        t.join()
