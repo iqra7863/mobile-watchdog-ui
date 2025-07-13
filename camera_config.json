@@ -3,10 +3,5 @@
     "ip": "http://100.78.217.126:8080/video",
     "room": "Classroom 1",
     "source": "ip"
-  },
-  {
-    "ip": "http://100.72.155.164:8080/video",
-    "room": "Classroom 2",
-    "source": "ip"
   }
 ]

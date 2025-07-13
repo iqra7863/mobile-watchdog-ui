@@ -7,17 +7,16 @@ import glob
 app = Flask(__name__)
 app.secret_key = 'guardian_secret'
 
-# Config files and folders
+# Config files
 CAM_CONFIG_FILE = 'camera_config.json'
 USER_FILE = 'users.json'
 SCREENSHOT_FOLDER = 'screenshots'
 LOG_FILE = 'logs.csv'
 STATE_FILE = 'detection_state.json'
 
-# Ensure screenshot folder exists
 os.makedirs(SCREENSHOT_FOLDER, exist_ok=True)
 
-# ----------- Utility Functions --------------
+# ---------- Utility Functions ----------
 def load_users():
     if os.path.exists(USER_FILE):
         with open(USER_FILE, 'r') as f:
@@ -32,9 +31,31 @@ def load_cameras():
 
 def save_cameras(cameras):
     with open(CAM_CONFIG_FILE, 'w') as f:
-        json.dump(cameras, f, indent=4)
+        json.dump(cameras, f, indent=2)
 
-# ----------- Login Routes --------------
+def read_logs():
+    logs = []
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, 'r') as f:
+            for line in f:
+                parts = line.strip().split(',')
+                if len(parts) >= 3:
+                    logs.append({
+                        'timestamp': parts[0],
+                        'room': parts[1],
+                        'label': parts[2]
+                    })
+    return logs
+
+def get_images_for_class(classroom):
+    images = []
+    all_images = glob.glob(os.path.join(SCREENSHOT_FOLDER, f'{classroom}_*.jpg'))
+    all_images.sort(key=os.path.getmtime, reverse=True)
+    for img in all_images[:20]:
+        images.append({'file': os.path.basename(img), 'room': classroom})
+    return images
+
+# ---------- Routes ----------
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -44,6 +65,8 @@ def login():
         if user in users and users[user]['password'] == pwd:
             session['username'] = user
             session['role'] = users[user]['role']
+            session['allowed_classes'] = users[user].get('allowed_classes', [])
+            session['selected_class'] = session['allowed_classes'][0] if session['allowed_classes'] else None
             return redirect('/dashboard')
         else:
             return render_template('login.html', error="Invalid credentials")
@@ -54,78 +77,38 @@ def logout():
     session.clear()
     return redirect('/')
 
-# ----------- Dashboard --------------
-@app.route('/dashboard')
+@app.route('/set_classroom', methods=['POST'])
+def set_classroom():
+    session['selected_class'] = request.form.get('selected_classroom')
+    return redirect('/dashboard')
+
+@app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
     if 'username' not in session:
         return redirect('/')
 
+    selected_class = session.get('selected_class')
+    allowed_classes = session.get('allowed_classes', [])
     cameras = load_cameras()
-    logs = []
+    logs = [log for log in read_logs() if log['room'] == selected_class]
+    images = get_images_for_class(selected_class)
 
-    # Load recent logs
-    if os.path.exists(LOG_FILE):
-        with open(LOG_FILE, 'r') as f:
-            lines = f.readlines()
-            for line in lines[-50:]:  # last 50 logs
-                parts = line.strip().split(',')
-                if len(parts) >= 3:
-                    logs.append({
-                        'timestamp': parts[0],
-                        'room': parts[1],
-                        'label': parts[2]
-                    })
+    return render_template('dashboard.html',
+                           logs=logs,
+                           screenshots=images,
+                           cameras=cameras,
+                           session=session,
+                           selected_classroom=selected_class,
+                           allowed_classes=allowed_classes)
 
-    # Load recent screenshots
-    images = []
-    all_images = glob.glob(os.path.join(SCREENSHOT_FOLDER, '*.jpg'))
-    all_images.sort(key=os.path.getmtime, reverse=True)
-    for img in all_images[:20]:
-        parts = os.path.basename(img).split('_')
-        room = parts[0] if len(parts) > 0 else 'Unknown'
-        images.append({'file': os.path.basename(img), 'room': room})
-
-    return render_template('dashboard.html', logs=logs, images=images, cameras=cameras, session=session)
 @app.route('/get_logs')
 def get_logs():
-    logs = []
-    if os.path.exists(LOG_FILE):
-        with open(LOG_FILE, 'r') as f:
-            lines = [line.strip() for line in f if line.strip()]
-            for line in lines[-50:]:
-                parts = line.strip().split(',')
-                if len(parts) >= 3:
-                    logs.append({
-                        'timestamp': parts[0],
-                        'room': parts[1],
-                        'label': parts[2]
-                    })
+    if 'username' not in session:
+        return jsonify([])
+    selected = session.get('selected_class')
+    logs = [log for log in read_logs() if log['room'] == selected]
     return jsonify(logs)
 
-# ----------- Mobile Dashboard --------------
-@app.route('/mobile_dashboard')
-def mobile_dashboard():
-    cameras = load_cameras()
-    logs = []
-    if os.path.exists(LOG_FILE):
-        with open(LOG_FILE, 'r') as f:
-            lines = f.readlines()
-            for line in lines[-50:]:
-                parts = line.strip().split(',')
-                if len(parts) >= 3:
-                    logs.append({'timestamp': parts[0], 'room': parts[1], 'label': parts[2]})
-
-    images = []
-    all_images = glob.glob(os.path.join(SCREENSHOT_FOLDER, '*.jpg'))
-    all_images.sort(key=os.path.getmtime, reverse=True)
-    for img in all_images[:20]:
-        parts = os.path.basename(img).split('_')
-        room = parts[0] if len(parts) > 0 else 'Unknown'
-        images.append({'file': os.path.basename(img), 'room': room})
-
-    return render_template('mobile_dashboard.html', logs=logs, images=images, cameras=cameras)
-
-# ----------- Camera Management --------------
 @app.route('/add_camera', methods=['POST'])
 def add_camera():
     if session.get('role') != 'admin':
@@ -144,86 +127,84 @@ def remove_camera(ip_encoded):
     if session.get('role') != 'admin':
         return "Unauthorized", 403
     ip = ip_encoded.replace('__SLASH__', '/')
-    cameras = load_cameras()
-    cameras = [c for c in cameras if c['ip'] != ip]
+    cameras = [c for c in load_cameras() if c['ip'] != ip]
     save_cameras(cameras)
     return redirect('/dashboard')
 
-# ----------- Live View Per Camera --------------
 @app.route('/camera_view')
 def camera_view():
+    if 'username' not in session:
+        return redirect('/')
     ip = request.args.get('ip')
     cameras = load_cameras()
     camera = next((c for c in cameras if c['ip'] == ip), None)
+    if not camera:
+        return "Camera not found", 404
+    room = camera['room']
+    logs = [log for log in read_logs() if log['room'] == room]
+    images = get_images_for_class(room)
+    return render_template('camera_view.html', camera=camera, logs=logs, images=images)
 
-    logs = []
-    images = []
-
-    if camera:
-        # Filter logs by room
-        if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    parts = line.strip().split(',')
-                    if len(parts) >= 3 and parts[1] == camera['room']:
-                        logs.append({'timestamp': parts[0], 'label': parts[2]})
-
-        # Filter screenshots by room
-        all_images = glob.glob(os.path.join(SCREENSHOT_FOLDER, '*.jpg'))
-        all_images.sort(key=os.path.getmtime, reverse=True)
-        for img in all_images:
-            parts = os.path.basename(img).split('_')
-            room = parts[0] if len(parts) > 0 else 'Unknown'
-            images.append({'file': os.path.basename(img), 'room': room})
-
-        return render_template('camera_view.html', camera=camera, logs=logs, images=images)
-
-    return "Camera not found", 404
-
-# ----------- Pause / Resume Detection --------------
 @app.route('/pause', methods=['POST'])
 def pause_detection():
     with open(STATE_FILE, 'w') as f:
-        json.dump({"status": "paused"}, f)
+        json.dump({'status': 'paused'}, f)
     return redirect('/dashboard')
 
 @app.route('/resume', methods=['POST'])
 def resume_detection():
     with open(STATE_FILE, 'w') as f:
-        json.dump({"status": "active"}, f)
+        json.dump({'status': 'active'}, f)
     return redirect('/dashboard')
 
-# ----------- Clear Per Room --------------
 @app.route('/clear_room/<room>')
 def clear_room(room):
-    # Delete screenshots of this room
     for file in os.listdir(SCREENSHOT_FOLDER):
-        if file.startswith(room + '_'):
+        if file.startswith(f'{room}_'):
             os.remove(os.path.join(SCREENSHOT_FOLDER, file))
-    # Remove logs of this room
-    if os.path.exists(LOG_FILE):
-        with open(LOG_FILE, 'r') as f:
-            lines = f.readlines()
-        with open(LOG_FILE, 'w') as f:
-            for line in lines:
-                if f',{room},' not in line:
-                    f.write(line)
+    logs = read_logs()
+    logs = [log for log in logs if log['room'] != room]
+    with open(LOG_FILE, 'w') as f:
+        for log in logs:
+            f.write(f"{log['timestamp']},{log['room']},{log['label']}\n")
     return redirect('/dashboard')
 
-# ----------- Screenshot Serving --------------
 @app.route('/screenshots/<filename>')
 def get_screenshot(filename):
     return send_from_directory(SCREENSHOT_FOLDER, filename)
 
-# ----------- Download Logs --------------
 @app.route('/download_logs')
 def download_logs():
+    if session.get('role') != 'admin':
+        return "Unauthorized", 403
     return send_file(LOG_FILE, as_attachment=True)
 
-# ----------- Initialize --------------
+# ---------- Mobile Dashboard ----------
+@app.route('/mobile_dashboard', methods=['GET', 'POST'])
+def mobile_dashboard():
+    if 'username' not in session:
+        return redirect('/')
+
+    allowed_classes = session.get('allowed_classes', [])
+    if not allowed_classes:
+        return "No classroom access configured", 403
+
+    # Handle classroom switch
+    if request.method == 'POST':
+        session['selected_class'] = request.form.get('selected_class')
+
+    selected_class = session.get('selected_class', allowed_classes[0])
+    logs = [log for log in read_logs() if log['room'] == selected_class]
+    images = get_images_for_class(selected_class)
+
+    return render_template('mobile_dashboard.html',
+                           logs=logs,
+                           images=images,
+                           selected_class=selected_class,
+                           allowed_classes=allowed_classes)
+# ---------- Init ----------
 if __name__ == '__main__':
     if not os.path.exists(STATE_FILE):
         with open(STATE_FILE, 'w') as f:
-            json.dump({"status": "active"}, f)
+            json.dump({'status': 'active'}, f)
     app.run(host='0.0.0.0', port=5000, debug=True)

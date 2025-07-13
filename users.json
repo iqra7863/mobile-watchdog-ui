@@ -1,10 +1,5 @@
 {
-  "admin": {
-    "password": "admin123",
-    "role": "admin"
-  },
-  "teacher1": {
-    "password": "teach123",
-    "role": "teacher"
-  }
+  "admin": { "password": "admin123", "role": "admin", "allowed_classes": ["Classroom 1", "Classroom 2", "Classroom 3"] },
+  "teacher1": { "password": "teach123", "role": "teacher", "allowed_classes": ["Classroom 1", "Classroom 2"] },
+  "teacher2": { "password": "teach456", "role": "teacher", "allowed_classes": ["Classroom 3"] }
 }

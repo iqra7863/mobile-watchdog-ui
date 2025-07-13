@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Camera: {{ camera.room }}</title>
@@ -7,74 +7,79 @@
     body {
       background-color: #000;
       color: #fff;
-      text-align: center;
-      font-family: sans-serif;
-      margin: 0;
+      font-family: Arial, sans-serif;
       padding: 20px;
+      text-align: center;
     }
     h2 {
-      color: #aaf;
+      color: #0f0;
     }
     .live-image {
       border: 2px solid #0f0;
       border-radius: 10px;
-      margin-top: 10px;
-      max-width: 95%;
+      margin: 15px 0;
+      max-width: 90%;
     }
     table {
       margin: 20px auto;
       border-collapse: collapse;
-      width: 90%;
+      width: 95%;
       color: #ccc;
     }
     th, td {
       padding: 8px;
-      border: 1px solid #555;
+      border: 1px solid #444;
+      font-size: 14px;
     }
-    img.screenshot {
+    .screenshot {
       width: 180px;
       margin: 10px;
-      border: 1px solid #666;
+      border: 1px solid #444;
       border-radius: 6px;
     }
     a {
-      color: cyan;
+      color: #0cf;
       text-decoration: none;
-      margin-top: 20px;
+      margin-top: 15px;
       display: inline-block;
     }
   </style>
 </head>
 <body>
 
-<h2>🎥 Live View — {{ camera.room }}</h2>
+<h2>📸 Live View — {{ camera.room }}</h2>
 
-<!-- Auto-refreshing live snapshot -->
-<img id="liveSnapshot" class="live-image" src="{{ camera.ip.replace('/video', '/shot.jpg') }}" alt="Live View">
+<!-- 🔁 Auto-refreshing Live Snapshot -->
+<img id="liveSnapshot" class="live-image" src="{{ camera.ip.replace('/video', '/shot.jpg') }}" alt="Live Snapshot">
 <script>
   setInterval(() => {
     const img = document.getElementById("liveSnapshot");
     img.src = "{{ camera.ip.replace('/video', '/shot.jpg') }}" + "?t=" + new Date().getTime();
-  }, 1000); // Refresh every 1 second
+  }, 1000); // Refresh every second
 </script>
 
 <a href="/dashboard">← Back to Dashboard</a>
 
-<hr style="margin: 30px;">
+<hr style="margin: 30px 0;">
 
+<!-- 📄 Logs -->
 <h3>🕒 Logs — {{ camera.room }}</h3>
 <table>
   <tr><th>Time</th><th>Label</th></tr>
   {% for log in logs %}
-    <tr><td>{{ log.timestamp }}</td><td>{{ log.label }}</td></tr>
+    <tr>
+      <td>{{ log.timestamp }}</td>
+      <td>{{ log.label }}</td>
+    </tr>
   {% endfor %}
 </table>
 
-<h3>📸 Screenshots — {{ camera.room }}</h3>
-<div style="text-align:center;">
+<!-- 🖼️ Screenshots -->
+<h3>🖼️ Screenshots — {{ camera.room }}</h3>
+<div style="text-align: center;">
   {% for img in images %}
     {% if img.room == camera.room %}
-      <img src="/screenshots/{{ img.file }}" class="screenshot">
+      <img src="/screenshots/{{ img.file }}" class="screenshot" alt="Screenshot">
     {% endif %}
   {% endfor %}
 </div>

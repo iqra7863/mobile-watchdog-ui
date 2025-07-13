@@ -10,7 +10,9 @@
       font-family: Arial, sans-serif;
       padding: 20px;
     }
-    h2 { color: #0f0; }
+    h2, h3 {
+      color: #0f0;
+    }
     a, button {
       background-color: #333;
       color: white;
@@ -19,6 +21,7 @@
       margin: 5px;
       text-decoration: none;
       cursor: pointer;
+      border-radius: 4px;
     }
     table {
       width: 100%;
@@ -32,7 +35,7 @@
     }
     .screenshot {
       width: 160px;
-      margin: 10px;
+      height: auto;
       border: 1px solid #555;
       border-radius: 6px;
     }
@@ -42,6 +45,16 @@
 
 <h2>👁️ Guardian Vision - Dashboard ({{ session.username }})</h2>
 
+<!-- Classroom Filter Dropdown -->
+<form method="post" action="/set_classroom">
+  <label for="classroom_select">Select Classroom:</label>
+  <select name="selected_classroom" id="classroom_select" onchange="this.form.submit()">
+    {% for classroom in allowed_classes %}
+      <option value="{{ classroom }}" {% if classroom == selected_classroom %}selected{% endif %}>{{ classroom }}</option>
+    {% endfor %}
+  </select>
+</form>
+
 <!-- Controls -->
 <form method="get" action="/dashboard" style="display:inline;">
   <button type="submit">🔄 Refresh</button>
@@ -50,6 +63,7 @@
 <form method="post" action="/pause" style="display:inline;">
   <button type="submit">⏸️ Pause Detection</button>
 </form>
+
 <form method="post" action="/resume" style="display:inline;">
   <button type="submit">▶️ Resume Detection</button>
 </form>
@@ -58,7 +72,7 @@
   <a href="/download_logs">⬇️ Download Logs</a>
 {% endif %}
 
-<!-- Add Camera Form -->
+<!-- Add Camera Form (Admin Only) -->
 {% if session.role == 'admin' %}
   <h3>Add Camera</h3>
   <form method="POST" action="/add_camera">
@@ -70,7 +84,7 @@
 {% endif %}
 
 <!-- Camera List -->
-<h3>🎥 Connected Cameras</h3>
+<h3>📷 Connected Cameras</h3>
 <table>
   <tr><th>Room</th><th>IP</th><th>Live</th><th>Actions</th></tr>
   {% for cam in cameras %}
@@ -88,6 +102,19 @@
   {% endfor %}
 </table>
 
+<!-- Screenshot Gallery -->
+<h3>🖼️ Screenshots - {{ selected_classroom }}</h3>
+<div style="display: flex; flex-wrap: wrap; gap: 10px;">
+  {% for shot in screenshots %}
+    <a href="/screenshots/{{ shot.file }}" target="_blank">
+      <img src="/screenshots/{{ shot.file }}" class="screenshot" title="{{ shot.file }}">
+    </a>
+  {% endfor %}
+  {% if screenshots|length == 0 %}
+    <p>No screenshots available for {{ selected_classroom }}.</p>
+  {% endif %}
+</div>
+
 <!-- Logs -->
 <h3>📄 Recent Logs</h3>
 {% if logs %}
@@ -102,10 +129,10 @@
   {% endfor %}
 </table>
 {% else %}
-  <p>No logs available.</p>
+  <p>No logs available for {{ selected_classroom }}.</p>
 {% endif %}
 
-<!-- Screenshots -->
+<!-- Live Log Console (Auto-Refresh) -->
 <h3>📄 Live Log Console</h3>
 <div id="live-logs">Loading logs...</div>
 
@@ -123,8 +150,9 @@
       });
   }
 
-  fetchLogs();              // Load immediately
-  setInterval(fetchLogs, 5000); // Update every 5 seconds
+  fetchLogs();              // Initial load
+  setInterval(fetchLogs, 5000);  // Refresh every 5s
 </script>
+
 </body>
 </html>

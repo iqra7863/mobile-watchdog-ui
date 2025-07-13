@@ -2,68 +2,85 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Mobile Detection Viewer</title>
+    <title>📱 Guardian Vision - Mobile Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
             background-color: #111;
             color: #eee;
             font-family: sans-serif;
-            padding: 10px;
+            padding: 15px;
         }
         h2, h3 {
             color: #0f0;
         }
+        select, button {
+            font-size: 16px;
+            padding: 6px;
+            margin-bottom: 10px;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin: 10px 0;
         }
         th, td {
             padding: 6px;
             border: 1px solid #444;
-            text-align: left;
             font-size: 14px;
         }
         img {
             width: 100%;
             max-width: 250px;
-            height: auto;
-            border: 1px solid #555;
             margin: 5px 0;
+            border: 1px solid #555;
+            border-radius: 6px;
         }
-        .image-block {
-            margin-bottom: 15px;
+        .screenshot-block {
+            margin-bottom: 20px;
         }
     </style>
 </head>
 <body>
 
-<h2>📱 Mobile Detection Dashboard</h2>
+<h2>📱 Guardian Vision</h2>
 
-<h3>🕒 Recent Logs</h3>
+<!-- 🔽 Class Selector -->
+<form method="post" action="/mobile_dashboard">
+    <label>Select Classroom:</label><br>
+    <select name="selected_class" onchange="this.form.submit()">
+        {% for cls in allowed_classes %}
+            <option value="{{ cls }}" {% if cls == selected_class %}selected{% endif %}>{{ cls }}</option>
+        {% endfor %}
+    </select>
+</form>
+
+<h3>🕒 Recent Logs ({{ selected_class }})</h3>
+{% if logs %}
 <table>
-    <tr>
-        <th>Time</th>
-        <th>Room</th>
-        <th>Label</th>
-    </tr>
+    <tr><th>Time</th><th>Label</th></tr>
     {% for log in logs %}
-    <tr>
-        <td>{{ log.timestamp }}</td>
-        <td>{{ log.room }}</td>
-        <td>{{ log.label }}</td>
-    </tr>
+        <tr>
+            <td>{{ log.timestamp }}</td>
+            <td>{{ log.label }}</td>
+        </tr>
     {% endfor %}
 </table>
+{% else %}
+<p>No logs available for this class.</p>
+{% endif %}
 
-<h3>🖼️ Recent Screenshots</h3>
-{% for img in images %}
-<div class="image-block">
-    <img src="/screenshots/{{ img.file }}">
-    <small>📍 Room: {{ img.room }}</small>
-</div>
-{% endfor %}
+<h3>🖼️ Screenshots</h3>
+{% if images %}
+    {% for img in images %}
+    <div class="screenshot-block">
+        <img src="/screenshots/{{ img.file }}">
+        <small>📍 Room: {{ img.room }}</small>
+    </div>
+    {% endfor %}
+{% else %}
+<p>No screenshots available for this class.</p>
+{% endif %}
 
 </body>
 </html>
